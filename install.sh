@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 #######################################
-# Moonlight CLI Installer (Auto-Refresh)
+# Moonlight CLI Installer (Smart Check)
 # Service Cops Tooling
 #######################################
 
@@ -15,9 +15,11 @@ RESET='\033[0m'
 BOLD='\033[1m'
 GREEN='\033[32m'
 BLUE='\033[34m'
+YELLOW='\033[33m'
 
 log()  { echo -e "${BLUE}🌕${RESET} ${BOLD}$*${RESET}"; }
 done_log() { echo -e "${GREEN}✅${RESET} ${BOLD}$*${RESET}"; }
+warn() { echo -e "${YELLOW}⚠️  $*${RESET}"; }
 die()  { echo -e "❌ $*" >&2; exit 1; }
 
 check_dependencies() {
@@ -30,48 +32,50 @@ detect_profile() {
   [[ "${SHELL:-}" == *zsh* ]] && echo "$HOME/.zshrc" || echo "$HOME/.bashrc"
 }
 
-install_script() {
+main() {
+  clear
+  echo -e "${BOLD}Service Cops Moonlight Installer${RESET}"
+  echo "------------------------------------------------"
+
+  # 1. Check if Moonlight is already installed
+  if command -v moonlight >/dev/null 2>&1; then
+    log "Moonlight is already installed!"
+    log "Running 'moonlight update' for you instead..."
+    echo "------------------------------------------------"
+    moonlight update
+    exit 0
+  fi
+
+  # 2. Proceed with Fresh Installation
+  check_dependencies
+
   mkdir -p "$MOONLIGHT_HOME"
   local tmp_file=$(mktemp)
+
+  log "Installing fresh version..."
   log "Downloading Moonlight CLI..."
   curl -fSL# "$RAW_URL" -o "$tmp_file" || die "Download failed."
   chmod +x "$tmp_file"
   mv "$tmp_file" "$MOONLIGHT_SCRIPT"
-}
 
-install_symlink() {
+  # Setup Symlink
   mkdir -p "$LOCAL_BIN"
   rm -f "$LOCAL_BIN/moonlight"
   ln -s "$MOONLIGHT_SCRIPT" "$LOCAL_BIN/moonlight"
   done_log "Symlinked to $LOCAL_BIN/moonlight"
-}
 
-ensure_path() {
+  # Ensure PATH
   local profile=$(detect_profile)
   touch "$profile"
   if ! grep -q "export PATH=.*$LOCAL_BIN" "$profile"; then
     log "Adding $LOCAL_BIN to PATH in $profile"
     echo -e "\n# Moonlight CLI\nexport PATH=\"$LOCAL_BIN:\$PATH\"" >> "$profile"
   fi
-}
-
-main() {
-  clear
-  echo -e "${BOLD}Service Cops Moonlight Installer${RESET}"
-  echo "------------------------------------------------"
-
-  check_dependencies
-  install_script
-  install_symlink
-  ensure_path
 
   done_log "Installation complete! 🚀"
-  log "Restarting shell to activate 'moonlight'..."
+  log "Restarting shell to activate..."
 
-  # The 'hash -r' clears the command location cache
   hash -r 2>/dev/null || true
-
-  # Auto-refresh: Replace current process with a new login shell
   exec "$SHELL" -l
 }
 
