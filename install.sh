@@ -16,6 +16,7 @@ RESET='\033[0m'
 BOLD='\033[1m'
 GREEN='\033[32m'
 BLUE='\033[34m'
+YELLOW='\033[33m'
 
 log()  { echo -e "${BLUE}🌕${RESET} ${BOLD}$*${RESET}"; }
 done_log() { echo -e "${GREEN}✅${RESET} ${BOLD}$*${RESET}"; }
@@ -51,7 +52,6 @@ install_script() {
   tmp_file="$(mktemp)"
 
   log "Downloading Moonlight CLI..."
-  # -# displays a simple progress bar
   curl -fSL# "$RAW_URL" -o "$tmp_file" || die "Download failed."
 
   chmod +x "$tmp_file"
@@ -60,9 +60,8 @@ install_script() {
 
 install_symlink() {
   mkdir -p "$LOCAL_BIN"
-  if [[ -L "$LOCAL_BIN/moonlight" ]]; then
-    rm "$LOCAL_BIN/moonlight"
-  fi
+  # Explicitly remove old symlink to avoid 'File exists' errors
+  rm -f "$LOCAL_BIN/moonlight"
   ln -s "$MOONLIGHT_SCRIPT" "$LOCAL_BIN/moonlight"
   done_log "Binary symlinked to $LOCAL_BIN/moonlight"
 }
@@ -114,9 +113,11 @@ main() {
 
   if [[ "${PATH_UPDATED:-false}" == true ]]; then
     echo -e "\n${BOLD}Note:${RESET} ~/.local/bin was added to your PATH."
-    echo "You need to refresh your session to start using 'moonlight'."
+    echo -e "You need to refresh your session to start using ${BLUE}'moonlight'${RESET}."
 
-    read -rp "Refresh terminal session now? (y/n): " RESP
+    echo -ne "\n${BOLD}➜${RESET} Refresh terminal session now? (y/n): "
+    read -r RESP
+
     if [[ "$RESP" =~ ^[yY]$ ]]; then
       log "Refreshing..."
       exec "$SHELL" -l

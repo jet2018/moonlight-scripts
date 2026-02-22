@@ -2,10 +2,11 @@
 set -Eeuo pipefail
 
 #######################################
-# Moonlight CLI v1.0.3
+# Moonlight CLI v0.0.1
+# Service Cops Tooling
 #######################################
 
-VERSION="1.0.3"
+VERSION="0.0.1"
 TEMPLATE_URL="https://bitbucket.org/servicecops/j2j_spring_boot_starter_kit.git"
 RAW_SCRIPT_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 BASE_GROUP_PATH="com/servicecops"
@@ -63,24 +64,22 @@ detect_profile() {
 #######################################
 
 cmd_help() {
-cat <<EOF
-${BOLD}🌕 Moonlight CLI v$VERSION${RESET}
-Service Cops Spring Boot Project Toolkit
-
-${BOLD}Usage:${RESET}
-  moonlight <command> [options]
-
-${BOLD}Core Commands:${RESET}
-  new <name> [tag]      Create a new project from template
-  check                 Show latest available template tag
-  update | -u           Update Moonlight CLI to latest version
-  version | -v          Show installed CLI version
-  uninstall             Remove Moonlight CLI
-  help | -h             Show this help message
-
-${BOLD}Examples:${RESET}
-  moonlight new billing-service
-EOF
+  echo -e "${BOLD}🌕 Moonlight CLI v$VERSION${RESET}"
+  echo -e "Service Cops Spring Boot Project Toolkit"
+  echo -e ""
+  echo -e "${BOLD}Usage:${RESET}"
+  echo -e "  moonlight <command> [options]"
+  echo -e ""
+  echo -e "${BOLD}Core Commands:${RESET}"
+  echo -e "  ${BLUE}new${RESET} <name> [tag]      Create a new project from template"
+  echo -e "  ${BLUE}check${RESET}                 Show latest available template tag"
+  echo -e "  ${BLUE}update${RESET} | -u           Update Moonlight CLI to latest version"
+  echo -e "  ${BLUE}version${RESET} | -v          Show installed CLI version"
+  echo -e "  ${BLUE}uninstall${RESET}             Remove Moonlight CLI"
+  echo -e "  ${BLUE}help${RESET} | -h             Show this help message"
+  echo -e ""
+  echo -e "${BOLD}Examples:${RESET}"
+  echo -e "  moonlight new billing-service"
 }
 
 #######################################
@@ -110,15 +109,19 @@ cmd_new() {
   local DB_NAME DB_USER DB_PASS
   echo -e "\n${BOLD}📦 Database Configuration${RESET}"
   while true; do
-    read -rp "  $(echo -e "${BLUE}➜${RESET} Database Name [$APP_NAME]: ")" DB_NAME
+    echo -ne "  ${BLUE}➜${RESET} Database Name [$APP_NAME]: "
+    read -r DB_NAME
     DB_NAME="${DB_NAME:-$APP_NAME}"
     [[ "$DB_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] && break
     warn "  Invalid database name. Use alphanumeric/underscores only."
   done
 
-  read -rp "  $(echo -e "${BLUE}➜${RESET} Database Username [postgres]: ")" DB_USER
+  echo -ne "  ${BLUE}➜${RESET} Database Username [postgres]: "
+  read -r DB_USER
   DB_USER="${DB_USER:-postgres}"
-  read -rsp "  $(echo -e "${BLUE}➜${RESET} Database Password (hidden): ")" DB_PASS
+
+  echo -ne "  ${BLUE}➜${RESET} Database Password (hidden): "
+  read -rs DB_PASS
   echo -e "\n"
 
   if command -v psql >/dev/null 2>&1; then
@@ -180,9 +183,10 @@ cmd_new() {
   echo -e "  ${BLUE}3)${RESET} Stay in Terminal"
   echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-  read -rp "$(echo -e "  ${BLUE}➜${RESET} Select an option [3]: ")" IDE_CHOICE
+  echo -ne "  ${BLUE}➜${RESET} Select an option [3]: "
+  read -r IDE_CHOICE
 
-  case "$IDE_CHOICE" in
+  case "${IDE_CHOICE:-3}" in
     1)
       log "Launching IntelliJ IDEA..."
       if command -v idea &>/dev/null; then
@@ -248,8 +252,8 @@ cmd_update() {
 #######################################
 
 cmd_uninstall() {
-  local CONFIRM
-  read -rp "Remove Moonlight CLI? (y/n): " CONFIRM
+  echo -ne "${YELLOW}➜${RESET} Remove Moonlight CLI? (y/n): "
+  read -r CONFIRM
   [[ "$CONFIRM" =~ ^[yY]$ ]] || exit 0
 
   local PROFILE
@@ -258,6 +262,7 @@ cmd_uninstall() {
 
   rm -rf "$MOONLIGHT_HOME"
   sed "${SED_INPLACE[@]}" '/alias moonlight=/d' "$PROFILE"
+  sed "${SED_INPLACE[@]}" '/moonlight/d' "$PROFILE"
 
   log "Moonlight removed. Restarting shell..."
   exec "$SHELL" -l
