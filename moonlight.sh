@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- CONFIGURATION ---
-VERSION="1.0.2"
+VERSION="1.0.0"
 TEMPLATE_URL="https://bitbucket.org/servicecops/j2j_spring_boot_starter_kit.git"
 RAW_SCRIPT_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 BASE_GROUP_PATH="com/servicecops"
@@ -16,7 +16,11 @@ if [[ "$OSTYPE" == "darwin"* ]]; then SED_CMD=(sed -i ''); else SED_CMD=(sed -i)
 
 case $COMMAND in
     "new")
-        if [ -z "$APP_NAME" ]; then echo "❌ Usage: moonlight new <app_name>"; exit 1; fi
+        if [ -z "$APP_NAME" ]; then
+            echo "❌ Error: Project name is required."
+            echo "Usage: moonlight new <project-name> [tag]"
+            exit 1
+        fi
         PACKAGE_NAME=$(echo "$APP_NAME" | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]')
 
         echo "🔍 Connecting to Bitbucket..."
@@ -33,7 +37,6 @@ case $COMMAND in
         "${SED_CMD[@]}" "s/<artifactId>project<\/artifactId>/<artifactId>$APP_NAME<\/artifactId>/g" pom.xml
         "${SED_CMD[@]}" "s/<name>project<\/name>/<name>$APP_NAME<\/name>/g" pom.xml
 
-        # Package Refactoring
         for dir in src/main/java src/test/java; do
             if [ -d "$dir/$BASE_GROUP_PATH/project" ]; then
                 mkdir -p "$dir/$BASE_GROUP_PATH/$PACKAGE_NAME"
@@ -46,18 +49,28 @@ case $COMMAND in
         echo "✅ SUCCESS: $APP_NAME is ready."
         ;;
 
-    "update")
-        echo "🔄 Checking for updates..."
+    "update"|"-u")
+        echo "🔄 Checking for CLI updates..."
         CACHE_BUSTER=$(date +%s)
         REMOTE_VERSION=$(curl -fsSL "${RAW_SCRIPT_URL}?v=${CACHE_BUSTER}" | grep '^VERSION=' | head -1 | cut -d '"' -f 2)
 
         if [ "$REMOTE_VERSION" == "$VERSION" ]; then
-            echo "✅ You are already on the latest version ($VERSION)."
+            echo "✅ Already on latest CLI version ($VERSION)."
         else
             echo "📥 Updating: v$VERSION -> v$REMOTE_VERSION..."
             curl -fsSL "${RAW_SCRIPT_URL}?v=${CACHE_BUSTER}" -o "$0.tmp" && mv "$0.tmp" "$0" && chmod +x "$0"
-            echo "🚀 Moonlight updated successfully!"
+            echo "🚀 Update successful! Refreshing shell..."
+            exec $SHELL -l
         fi
+        ;;
+
+    "version"|"-v"|"--version")
+        echo "🌕 Moonlight CLI Information"
+        echo "------------------------------------------------"
+        echo "💻 CLI Local Version:  $VERSION"
+        LATEST_TAG=$(git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" | grep -v "\^{}" | cut -d '/' -f 3 | tail -n 1)
+        echo "📦 Latest Template Tag: ${LATEST_TAG:-main}"
+        echo "------------------------------------------------"
         ;;
 
     "uninstall")
@@ -66,11 +79,38 @@ case $COMMAND in
         if [[ $confirm == [yY] ]]; then
             rm -rf "$MOONLIGHT_HOME"
             [[ "$OSTYPE" == "darwin"* ]] || [[ "$SHELL" == *"zsh"* ]] && PROFILE="$HOME/.zshrc" || PROFILE="$HOME/.bashrc"
-            [ -f "$PROFILE" ] && "${SED_CMD[@]}" "/alias moonlight=/d" "$PROFILE"
-            echo "✅ Moonlight uninstalled. Please restart your terminal."
+            if [ -f "$PROFILE" ]; then
+                "${SED_CMD[@]}" "/alias moonlight=/d" "$PROFILE"
+            fi
+            echo "✅ Moonlight uninstalled. Refreshing session..."
+            exec $SHELL -l
         fi
         ;;
 
-    "version") echo "🌕 Moonlight CLI Version: $VERSION" ;;
-    *) echo "🌕 Moonlight CLI | Usage: moonlight {new|update|version|uninstall}"; exit 1 ;;
+    "help"|*)
+        echo "🌕 Moonlight CLI - Service Cops Project Scaffolder"
+        echo "--------------------------------------------------------"
+        echo "Usage: moonlight <command> [arguments]"
+        echo ""
+        echo "COMMANDS:"
+        echo "  new <name> [tag]  Scaffold a new Spring Boot project."
+        echo "                    - Sanitizes <name> for Java packages."
+        echo "                    - Clones the latest Bitbucket tag by default."
+        echo "                    - Re-initializes a fresh Git repository."
+        echo ""
+        echo "  update, -u        Check GitHub for a newer version of this CLI."
+        echo "                    - Automatically downloads and replaces the script."
+        echo "                    - Restarts your shell session to apply changes."
+        echo ""
+        echo "  version, -v       Display local CLI version and the latest"
+        echo "                    available project template tag from Bitbucket."
+        echo ""
+        echo "  uninstall         Completely remove the CLI and its terminal alias."
+        echo ""
+        echo "EXAMPLES:"
+        echo "  moonlight new schoolpay-ug"
+        echo "  moonlight new my-service v1.2.0"
+        echo "--------------------------------------------------------"
+        exit 0
+        ;;
 esac
