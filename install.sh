@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+#######################################
+# Moonlight CLI Installer (Auto-Refresh)
+# Service Cops Tooling
+#######################################
+
 MOONLIGHT_HOME="$HOME/.moonlight"
 MOONLIGHT_SCRIPT="$MOONLIGHT_HOME/moonlight.sh"
 RAW_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
@@ -47,26 +52,27 @@ ensure_path() {
   if ! grep -q "export PATH=.*$LOCAL_BIN" "$profile"; then
     log "Adding $LOCAL_BIN to PATH in $profile"
     echo -e "\n# Moonlight CLI\nexport PATH=\"$LOCAL_BIN:\$PATH\"" >> "$profile"
-    PATH_UPDATED=true
-  else
-    PATH_UPDATED=false
   fi
 }
 
 main() {
   clear
   echo -e "${BOLD}Service Cops Moonlight Installer${RESET}"
+  echo "------------------------------------------------"
+
   check_dependencies
   install_script
   install_symlink
   ensure_path
-  done_log "Installation complete! 🚀"
 
-  if [[ "${PATH_UPDATED:-false}" == true ]]; then
-    echo -ne "\n${BOLD}➜${RESET} Refresh shell now? (y/n): "
-    read -r RESP
-    [[ "$RESP" =~ ^[yY]$ ]] && exec "$SHELL" -l
-  fi
+  done_log "Installation complete! 🚀"
+  log "Restarting shell to activate 'moonlight'..."
+
+  # The 'hash -r' clears the command location cache
+  hash -r 2>/dev/null || true
+
+  # Auto-refresh: Replace current process with a new login shell
+  exec "$SHELL" -l
 }
 
 main
