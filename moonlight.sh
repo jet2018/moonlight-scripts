@@ -2,16 +2,17 @@
 set -Eeuo pipefail
 
 #######################################
-# Moonlight CLI v2
+# Moonlight CLI v1.0.2
+# Service Cops Tooling
 #######################################
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 TEMPLATE_URL="https://bitbucket.org/servicecops/j2j_spring_boot_starter_kit.git"
 RAW_SCRIPT_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 BASE_GROUP_PATH="com/servicecops"
 MOONLIGHT_HOME="$HOME/.moonlight"
 
-COMMAND="${1:-}"
+COMMAND="${1:-help}"
 APP_NAME="${2:-}"
 TAG_VERSION="${3:-}"
 
@@ -20,7 +21,7 @@ TAG_VERSION="${3:-}"
 #######################################
 
 log()  { echo "🌕 $*"; }
-warn() { echo "⚠️  $*" >&2; }
+warn() { echo "⚠️  $*"; }
 die()  { echo "❌ $*" >&2; exit 1; }
 
 require_cmd() {
@@ -35,11 +36,12 @@ detect_sed() {
   fi
 }
 
+# Using a control character (\001) as a delimiter to support passwords with symbols
 safe_sed() {
   local search="$1"
   local replace="$2"
   local file="$3"
-  sed "${SED_INPLACE[@]}" "s|$search|$replace|g" "$file"
+  sed "${SED_INPLACE[@]}" "s$(printf '\001')$search$(printf '\001')$replace$(printf '\001')g" "$file"
 }
 
 detect_profile() {
@@ -51,7 +53,32 @@ detect_profile() {
 }
 
 #######################################
-# Core Actions
+# HELP
+#######################################
+
+cmd_help() {
+cat <<EOF
+🌕 Moonlight CLI v$VERSION
+Service Cops Spring Boot Project Toolkit
+
+Usage:
+  moonlight <command> [options]
+
+Core Commands:
+  new <name> [tag]      Create a new project from template
+  check                 Show latest available template tag
+  update | -u           Update Moonlight CLI to latest version
+  version | -v          Show installed CLI version
+  uninstall             Remove Moonlight CLI
+  help | -h             Show this help message
+
+Examples:
+  moonlight new billing-service
+EOF
+}
+
+#######################################
+# NEW PROJECT
 #######################################
 
 cmd_new() {
@@ -60,25 +87,26 @@ cmd_new() {
   detect_sed
 
   [[ -n "$APP_NAME" ]] || die "Usage: moonlight new <project-name> [tag]"
-
   [[ ! -d "$APP_NAME" ]] || die "Directory '$APP_NAME' already exists."
 
+  local PACKAGE_NAME
   PACKAGE_NAME="$(echo "$APP_NAME" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
 
-  log "Fetching remote tags..."
+  log "Fetching latest template tag..."
+  local LATEST_TAG
   LATEST_TAG="$(git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" \
     | grep -v '\^{}' | awk -F/ '{print $3}' | tail -n 1 || true)"
 
-  TARGET_TAG="${TAG_VERSION:-${LATEST_TAG:-main}}"
-
+  local TARGET_TAG="${TAG_VERSION:-${LATEST_TAG:-main}}"
   log "Using template tag: $TARGET_TAG"
 
-  log "Local development database setup"
+  # Database Setup
+  local DB_NAME DB_USER DB_PASS
   while true; do
     read -rp "Database Name [$APP_NAME]: " DB_NAME
     DB_NAME="${DB_NAME:-$APP_NAME}"
     [[ "$DB_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] && break
-    warn "Invalid database name."
+    warn "Invalid database name. Use alphanumeric/underscores only."
   done
 
   read -rp "Database Username [postgres]: " DB_USER
@@ -87,42 +115,42 @@ cmd_new() {
   echo ""
 
   if command -v psql >/dev/null 2>&1; then
-    log "Checking PostgreSQL database..."
-    if PGPASSWORD="$DB_PASS" psql -h localhost -U "$DB_USER" -lqt 2>/dev/null \
+    log "Checking PostgreSQL..."
+    if ! PGPASSWORD="$DB_PASS" psql -h localhost -U "$DB_USER" -lqt 2>/dev/null \
       | cut -d\| -f1 | grep -qw "$DB_NAME"; then
-      log "Database exists."
-    else
       log "Creating database '$DB_NAME'..."
-      if ! PGPASSWORD="$DB_PASS" createdb -h localhost -U "$DB_USER" "$DB_NAME" 2>/dev/null; then
-        warn "Database creation failed. You may need to create it manually."
-      fi
+      PGPASSWORD="$DB_PASS" createdb -h localhost -U "$DB_USER" "$DB_NAME" \
+        || warn "Database creation failed. You may need to create it manually."
+    else
+      log "Database '$DB_NAME' already exists."
     fi
-  else
-    warn "psql not found. Skipping database check."
   fi
 
   log "Cloning template..."
   git clone --depth 1 --branch "$TARGET_TAG" "$TEMPLATE_URL" "$APP_NAME" \
-    || die "Failed to clone template."
+    || die "Clone failed. Verify Bitbucket access."
 
   cd "$APP_NAME"
 
   safe_sed "<artifactId>project</artifactId>" "<artifactId>$APP_NAME</artifactId>" pom.xml
   safe_sed "<name>project</name>" "<name>$APP_NAME</name>" pom.xml
 
-  DEV_PROPS="src/main/resources/application-dev.properties"
+  local DEV_PROPS="src/main/resources/application-dev.properties"
   if [[ -f "$DEV_PROPS" ]]; then
+    log "Configuring application-dev.properties..."
     safe_sed "{database_name}" "$DB_NAME" "$DEV_PROPS"
     safe_sed "{username}" "$DB_USER" "$DEV_PROPS"
     safe_sed "{password}" "$DB_PASS" "$DEV_PROPS"
+  else
+    warn "application-dev.properties not found. Skipping DB injection."
   fi
 
   for dir in src/main/java src/test/java; do
-    SRC="$dir/$BASE_GROUP_PATH/project"
-    DST="$dir/$BASE_GROUP_PATH/$PACKAGE_NAME"
+    local SRC="$dir/$BASE_GROUP_PATH/project"
+    local DST="$dir/$BASE_GROUP_PATH/$PACKAGE_NAME"
     if [[ -d "$SRC" ]]; then
       mkdir -p "$DST"
-      cp -R "$SRC/"* "$DST/"
+      [ "$(ls -A "$SRC")" ] && cp -R "$SRC/"* "$DST/"
       rm -rf "$SRC"
     fi
   done
@@ -135,56 +163,73 @@ cmd_new() {
   rm -rf .git
   git init -b main
   git add .
-  git commit -m "Initial commit"
+  git commit -m "Initial commit from Moonlight"
 
-  log "Project '$APP_NAME' is ready 🚀"
+  log "Project '$APP_NAME' created successfully 🚀"
 
-  echo "Open in:"
-  echo "  1) IntelliJ IDEA"
-  echo "  2) VS Code"
-  echo "  3) Stay here"
-  read -rp "Choice [3]: " IDE
-
-  case "$IDE" in
-    1) command -v idea >/dev/null && idea . || [[ "$OSTYPE" == "darwin"* ]] && open -a "IntelliJ IDEA" . ;;
-    2) command -v code >/dev/null && code . ;;
+  # IDE Prompt
+  echo "------------------------------------------------"
+  echo "📂 Open in: 1) IntelliJ  2) VS Code  3) Done"
+  read -rp "Selection [3]: " IDE_CHOICE
+  case "$IDE_CHOICE" in
+    1) command -v idea &>/dev/null && idea . || ([[ "$OSTYPE" == "darwin"* ]] && open -a "IntelliJ IDEA" .) ;;
+    2) command -v code &>/dev/null && code . ;;
   esac
 }
 
+#######################################
+# CHECK
+#######################################
+
+cmd_check() {
+  require_cmd git
+  log "Checking latest template tag..."
+  git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" \
+    | grep -v '\^{}' | awk -F/ '{print $3}' | tail -n 1
+}
+
+#######################################
+# UPDATE
+#######################################
+
 cmd_update() {
   require_cmd curl
-  detect_sed
+  local TMP
+  TMP="$(mktemp)"
 
   log "Checking for updates..."
-  TMP="$(mktemp)"
-  if ! curl -fsSL "$RAW_SCRIPT_URL" -o "$TMP"; then
-    die "Failed to fetch remote script."
-  fi
+  curl -fsSL "$RAW_SCRIPT_URL" -o "$TMP" || die "Failed to fetch update."
 
-  REMOTE_VERSION="$(grep '^VERSION=' "$TMP" | head -1 | cut -d'"' -f2)"
-  [[ -n "$REMOTE_VERSION" ]] || die "Invalid remote script."
+  local REMOTE_VERSION
+  REMOTE_VERSION="$(grep '^VERSION=' "$TMP" | cut -d'"' -f2)"
 
   if [[ "$REMOTE_VERSION" != "$VERSION" ]]; then
-    log "Updating Moonlight CLI → v$REMOTE_VERSION"
     chmod +x "$TMP"
     mv "$TMP" "$0"
+    log "Updated to v$REMOTE_VERSION"
     exec "$SHELL" -l
   else
-    log "You are already on the latest version."
+    log "Already on latest version (v$VERSION)."
   fi
 }
 
+#######################################
+# UNINSTALL
+#######################################
+
 cmd_uninstall() {
-  read -rp "Uninstall Moonlight CLI? (y/n): " CONFIRM
+  local CONFIRM
+  read -rp "Remove Moonlight CLI? (y/n): " CONFIRM
   [[ "$CONFIRM" =~ ^[yY]$ ]] || exit 0
 
+  local PROFILE
   PROFILE="$(detect_profile)"
   detect_sed
 
   rm -rf "$MOONLIGHT_HOME"
   sed "${SED_INPLACE[@]}" '/alias moonlight=/d' "$PROFILE"
 
-  log "Moonlight CLI removed."
+  log "Moonlight removed. Restarting shell..."
   exec "$SHELL" -l
 }
 
@@ -194,18 +239,10 @@ cmd_uninstall() {
 
 case "$COMMAND" in
   new)        cmd_new ;;
+  check)      cmd_check ;;
   update|-u)  cmd_update ;;
-  version|-v|--version) echo "🌕 Moonlight CLI v$VERSION" ;;
-  check)      git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" | tail -n 1 ;;
+  version|-v) echo "🌕 Moonlight CLI v$VERSION" ;;
+  help|-h)    cmd_help ;;
   uninstall)  cmd_uninstall ;;
-  help|"")
-    echo "🌕 Moonlight CLI v$VERSION"
-    echo "Usage:"
-    echo "  moonlight new <name> [tag]"
-    echo "  moonlight update"
-    echo "  moonlight version"
-    echo "  moonlight check"
-    echo "  moonlight uninstall"
-    ;;
-  *) die "Unknown command: $COMMAND" ;;
+  *)          cmd_help ;;
 esac

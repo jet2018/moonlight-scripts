@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 #######################################
-# Configuration
+# Moonlight CLI Installer
+# Service Cops Tooling
 #######################################
 
 MOONLIGHT_HOME="$HOME/.moonlight"
@@ -10,16 +11,30 @@ MOONLIGHT_SCRIPT="$MOONLIGHT_HOME/moonlight.sh"
 RAW_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 LOCAL_BIN="$HOME/.local/bin"
 
+# Colors for polish
+RESET='\033[0m'
+BOLD='\033[1m'
+GREEN='\033[32m'
+BLUE='\033[34m'
+
+log()  { echo -e "${BLUE}🌕${RESET} ${BOLD}$*${RESET}"; }
+done_log() { echo -e "${GREEN}✅${RESET} ${BOLD}$*${RESET}"; }
+die()  { echo -e "❌ $*" >&2; exit 1; }
+
 #######################################
-# Utilities
+# Pre-flight Checks
 #######################################
 
-log()  { echo "🌕 $*"; }
-warn() { echo "⚠️  $*"; }
-die()  { echo "❌ $*" >&2; exit 1; }
+check_dependencies() {
+  for cmd in curl git; do
+    command -v "$cmd" >/dev/null 2>&1 || die "$cmd is required. Please install it first."
+  done
+}
 
 detect_profile() {
-  if [[ "${SHELL:-}" == *zsh* ]]; then
+  local shell_base
+  shell_base=$(basename "${SHELL:-}")
+  if [[ "$shell_base" == "zsh" ]]; then
     echo "$HOME/.zshrc"
   else
     echo "$HOME/.bashrc"
@@ -27,47 +42,48 @@ detect_profile() {
 }
 
 #######################################
-# Install Script Safely
+# Install Core
 #######################################
 
 install_script() {
   mkdir -p "$MOONLIGHT_HOME"
+  local tmp_file
+  tmp_file="$(mktemp)"
 
-  TMP="$(mktemp)"
   log "Downloading Moonlight CLI..."
+  # -# displays a simple progress bar
+  curl -fSL# "$RAW_URL" -o "$tmp_file" || die "Download failed."
 
-  curl -fsSL "$RAW_URL" -o "$TMP" || die "Download failed."
-
-  chmod +x "$TMP"
-  mv "$TMP" "$MOONLIGHT_SCRIPT"
+  chmod +x "$tmp_file"
+  mv "$tmp_file" "$MOONLIGHT_SCRIPT"
 }
-
-#######################################
-# Symlink into ~/.local/bin
-#######################################
 
 install_symlink() {
   mkdir -p "$LOCAL_BIN"
-  ln -sf "$MOONLIGHT_SCRIPT" "$LOCAL_BIN/moonlight"
+  if [[ -L "$LOCAL_BIN/moonlight" ]]; then
+    rm "$LOCAL_BIN/moonlight"
+  fi
+  ln -s "$MOONLIGHT_SCRIPT" "$LOCAL_BIN/moonlight"
+  done_log "Binary symlinked to $LOCAL_BIN/moonlight"
 }
 
 #######################################
-# Ensure PATH contains ~/.local/bin
+# Path Management
 #######################################
 
 ensure_path() {
-  PROFILE="$(detect_profile)"
-  touch "$PROFILE"
+  local profile
+  profile="$(detect_profile)"
+  touch "$profile"
 
-  if ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
-    if ! grep -q "$LOCAL_BIN" "$PROFILE"; then
-      log "Adding $LOCAL_BIN to PATH in $PROFILE"
-      {
-        echo ""
-        echo "# Moonlight CLI"
-        echo "export PATH=\"$LOCAL_BIN:\$PATH\""
-      } >> "$PROFILE"
-    fi
+  # Improved path check: search specifically for the export line
+  if ! grep -q "export PATH=.*$LOCAL_BIN" "$profile"; then
+    log "Adding $LOCAL_BIN to PATH in $profile"
+    {
+      echo ""
+      echo "# Moonlight CLI"
+      echo "export PATH=\"$LOCAL_BIN:\$PATH\""
+    } >> "$profile"
     PATH_UPDATED=true
   else
     PATH_UPDATED=false
@@ -75,47 +91,39 @@ ensure_path() {
 }
 
 #######################################
-# Force Refresh (Optional but Enabled)
-#######################################
-
-refresh_shell() {
-  log "Refreshing terminal session..."
-  exec "$SHELL" -l
-}
-
-#######################################
-# Main Flow
+# Main
 #######################################
 
 main() {
-  log "Installing Service Cops Moonlight CLI..."
+  clear
+  echo -e "${BOLD}Service Cops Moonlight Installer${RESET}"
+  echo "------------------------------------------------"
+
+  check_dependencies
 
   if [[ -f "$MOONLIGHT_SCRIPT" ]]; then
-    log "Existing installation detected. Updating..."
+    log "Existing installation detected. Upgrading..."
   fi
 
   install_script
   install_symlink
   ensure_path
 
-  echo ""
-  log "Installation complete 🚀"
   echo "------------------------------------------------"
+  done_log "Installation complete! 🚀"
 
   if [[ "${PATH_UPDATED:-false}" == true ]]; then
-    log "~/.local/bin added to PATH."
-  fi
+    echo -e "\n${BOLD}Note:${RESET} ~/.local/bin was added to your PATH."
+    echo "You need to refresh your session to start using 'moonlight'."
 
-  echo ""
-  read -rp "Refresh this terminal session now? (y/n): " RESP
-
-  if [[ "$RESP" =~ ^[yY]$ ]]; then
-    refresh_shell
+    read -rp "Refresh terminal session now? (y/n): " RESP
+    if [[ "$RESP" =~ ^[yY]$ ]]; then
+      log "Refreshing..."
+      exec "$SHELL" -l
+    fi
   else
-    echo ""
-    echo "To activate manually:"
-    echo "  source $(detect_profile)"
-    echo "or restart your terminal."
+    done_log "Your PATH is already configured."
+    echo -e "\nYou can now run: ${BOLD}moonlight help${RESET}"
   fi
 }
 
