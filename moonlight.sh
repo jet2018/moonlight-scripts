@@ -24,13 +24,16 @@ case $COMMAND in
         TARGET_TAG=${TAG_VERSION:-${LATEST_TAG:-main}}
 
         echo "🚀 Creating project '$APP_NAME' using tag: $TARGET_TAG..."
-        git clone --branch "$TARGET_TAG" --depth 1 "$TEMPLATE_URL" "$APP_NAME" || exit 1
-        cd "$APP_NAME" || exit
+        if ! git clone --branch "$TARGET_TAG" --depth 1 "$TEMPLATE_URL" "$APP_NAME"; then
+            echo "❌ Clone failed. Verify Bitbucket access."
+            exit 1
+        fi
 
+        cd "$APP_NAME" || exit
         "${SED_CMD[@]}" "s/<artifactId>project<\/artifactId>/<artifactId>$APP_NAME<\/artifactId>/g" pom.xml
         "${SED_CMD[@]}" "s/<name>project<\/name>/<name>$APP_NAME<\/name>/g" pom.xml
 
-        # Java Package Refactor
+        # Package Refactoring
         for dir in src/main/java src/test/java; do
             if [ -d "$dir/$BASE_GROUP_PATH/project" ]; then
                 mkdir -p "$dir/$BASE_GROUP_PATH/$PACKAGE_NAME"
@@ -58,30 +61,16 @@ case $COMMAND in
         ;;
 
     "uninstall")
-        echo "⚠️  This will delete Moonlight CLI and its terminal alias."
+        echo "⚠️  Uninstalling Moonlight CLI..."
         read -p "Are you sure? (y/n): " confirm
         if [[ $confirm == [yY] ]]; then
-            # 1. Remove the directory
-            echo "🗑️  Deleting $MOONLIGHT_HOME..."
             rm -rf "$MOONLIGHT_HOME"
-
-            # 2. Identify and Clean the Shell Profile
             [[ "$OSTYPE" == "darwin"* ]] || [[ "$SHELL" == *"zsh"* ]] && PROFILE="$HOME/.zshrc" || PROFILE="$HOME/.bashrc"
-
-            if [ -f "$PROFILE" ]; then
-                echo "🧹 Removing alias from $PROFILE..."
-                # Deletes any line containing 'alias moonlight='
-                "${SED_CMD[@]}" "/alias moonlight=/d" "$PROFILE"
-            fi
-
-            echo "------------------------------------------------"
-            echo "✅ Moonlight has been completely uninstalled."
-            echo "📢 Please restart your terminal or run: source $PROFILE"
-            echo "------------------------------------------------"
+            [ -f "$PROFILE" ] && "${SED_CMD[@]}" "/alias moonlight=/d" "$PROFILE"
+            echo "✅ Moonlight uninstalled. Please restart your terminal."
         fi
         ;;
 
     "version") echo "🌕 Moonlight CLI Version: $VERSION" ;;
-
     *) echo "🌕 Moonlight CLI | Usage: moonlight {new|update|version|uninstall}"; exit 1 ;;
 esac
