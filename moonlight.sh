@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # --- CONFIGURATION ---
-# The URL of your template repository
 TEMPLATE_URL="git@bitbucket.org:servicecops/j2j_spring_boot_starter_kit.git"
-# IMPORTANT: Replace this with the RAW URL of your jet.sh file on Bitbucket
-RAW_SCRIPT_URL="https://bitbucket.org/servicecops/jet-cli/raw/main/jet.sh"
+# ✅ Uses the GitHub Raw URL for self-updating
+RAW_SCRIPT_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 BASE_GROUP_PATH="com/servicecops"
 
 COMMAND=$1
@@ -17,14 +16,14 @@ if [[ "$OSTYPE" == "darwin"* ]]; then SED_CMD=(sed -i ''); else SED_CMD=(sed -i)
 case $COMMAND in
     "new")
         if [ -z "$APP_NAME" ]; then
-            echo "❌ Usage: jet new <app_name> [optional_tag_version]"
+            echo "❌ Usage: moonlight new <app_name> [optional_tag_version]"
             exit 1
         fi
 
         # 1. Sanitize Package Name (e.g., awesome-app becomes awesomeapp)
         PACKAGE_NAME=$(echo "$APP_NAME" | tr -d '-_' | tr '[:upper:]' '[:lower:]')
 
-        # 2. Find Latest Tag
+        # 2. Find Latest Tag from Bitbucket
         if [ -z "$TAG_VERSION" ]; then
             echo "🔍 Searching for the latest stable tag..."
             LATEST_TAG=$(git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" | grep -v "\^{}" | cut -d '/' -f 3 | tail -n 1)
@@ -75,12 +74,11 @@ case $COMMAND in
                 rm -rf "$dir/$BASE_GROUP_PATH/project"
             fi
         done
-        # Replace package declarations in all Java files
         find . -type f -name "*.java" -exec "${SED_CMD[@]}" "s/com.servicecops.project/com.servicecops.$PACKAGE_NAME/g" {} +
 
         # 8. Fresh Git Initialization
         echo "🧹 Resetting Git history..."
-        rm -rf .git && git init && git add . && git commit -m "Initial commit from Jet ($TARGET_TAG)"
+        rm -rf .git && git init && git add . && git commit -m "Initial commit from Moonlight ($TARGET_TAG)"
 
         echo "------------------------------------------------"
         echo "✅ SUCCESS: $APP_NAME is ready!"
@@ -90,21 +88,20 @@ case $COMMAND in
         ;;
 
     "update")
-        echo "🔄 Updating Jet CLI..."
-        # Downloads the raw file to a temporary location, then replaces the current script ($0)
-        if curl -s "$RAW_SCRIPT_URL" -o "$0.tmp"; then
+        echo "🔄 Updating Moonlight CLI..."
+        if curl -fsSL "$RAW_SCRIPT_URL" -o "$0.tmp"; then
             mv "$0.tmp" "$0"
             chmod +x "$0"
-            echo "🚀 Jet has been updated successfully!"
+            echo "🚀 Moonlight has been updated successfully!"
         else
-            echo "❌ Update failed. Check your internet connection or the RAW_SCRIPT_URL."
+            echo "❌ Update failed. Check your GitHub connection."
             exit 1
         fi
         ;;
 
     *)
-        echo "Jet CLI - Service Cops"
-        echo "Usage: jet {new|update}"
+        echo "🌕 Moonlight CLI - Service Cops"
+        echo "Usage: moonlight {new|update}"
         echo "  new <app_name> [tag]  - Scaffolds a new project"
         echo "  update                - Updates this tool to the latest version"
         exit 1

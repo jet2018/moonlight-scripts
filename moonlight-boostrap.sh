@@ -1,32 +1,36 @@
 #!/bin/bash
 
-JET_HOME="$HOME/.jet"
-JET_SCRIPT="$JET_HOME/jet.sh"
-# IMPORTANT: Replace this with the RAW URL of your jet.sh file on Bitbucket
-RAW_URL="https://bitbucket.org/servicecops/jet-cli/raw/main/jet.sh"
+MOONLIGHT_HOME="$HOME/.moonlight"
+MOONLIGHT_SCRIPT="$MOONLIGHT_HOME/moonlight.sh"
+# ✅ GitHub Raw URL
+RAW_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 
-echo "🛠️  Installing Service Cops Jet CLI..."
+echo "🛠️  Installing Service Cops Moonlight CLI..."
 
-# Create directory
-mkdir -p "$JET_HOME"
+mkdir -p "$MOONLIGHT_HOME"
 
-# Download the script
 echo "📥 Downloading tool..."
-curl -s "$RAW_URL" -o "$JET_SCRIPT"
-chmod +x "$JET_SCRIPT"
+if curl -fsSL "$RAW_URL" -o "$MOONLIGHT_SCRIPT" ; then
+    chmod +x "$MOONLIGHT_SCRIPT"
+else
+    echo "❌ Error: Could not download moonlight.sh"
+    exit 1
+fi
 
-# Detect Shell Profile (zsh for Mac, bash for Linux)
+# Detect Shell Profile
 [[ "$OSTYPE" == "darwin"* ]] || [[ "$SHELL" == *"zsh"* ]] && PROFILE="$HOME/.zshrc" || PROFILE="$HOME/.bashrc"
 
-# Add alias to the profile if it doesn't exist
-if ! grep -q "alias jet=" "$PROFILE"; then
-    echo -e "\n# Service Cops Tooling\nalias jet='$JET_SCRIPT'" >> "$PROFILE"
-    echo "✅ Alias 'jet' added to $PROFILE"
+touch "$PROFILE"
+
+# Add alias if missing
+if ! grep -q "alias moonlight=" "$PROFILE"; then
+    echo -e "\n# Service Cops Tooling\nalias moonlight='$MOONLIGHT_SCRIPT'" >> "$PROFILE"
+    echo "✅ Alias 'moonlight' added to $PROFILE"
 else
-    echo "ℹ️  Alias 'jet' already exists."
+    echo "ℹ️  Alias 'moonlight' already exists."
 fi
 
 echo "------------------------------------------------"
 echo "🎉 Done! Please run: source $PROFILE"
-echo "Then create your first project with: jet new my-app"
+echo "Then create your project with: moonlight new my-app"
 echo "------------------------------------------------"
