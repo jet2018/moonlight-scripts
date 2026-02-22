@@ -2,11 +2,10 @@
 set -Eeuo pipefail
 
 #######################################
-# Moonlight CLI v1.0.2
-# Service Cops Tooling
+# Moonlight CLI v1.0.3
 #######################################
 
-VERSION="1.0.2"
+VERSION="1.0.3"
 TEMPLATE_URL="https://bitbucket.org/servicecops/j2j_spring_boot_starter_kit.git"
 RAW_SCRIPT_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 BASE_GROUP_PATH="com/servicecops"
@@ -16,13 +15,21 @@ COMMAND="${1:-help}"
 APP_NAME="${2:-}"
 TAG_VERSION="${3:-}"
 
+# Colors and Styling
+BOLD='\033[1m'
+BLUE='\033[34m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RED='\033[31m'
+RESET='\033[0m'
+
 #######################################
 # Utilities
 #######################################
 
-log()  { echo "🌕 $*"; }
-warn() { echo "⚠️  $*"; }
-die()  { echo "❌ $*" >&2; exit 1; }
+log()  { echo -e "${BLUE}🌕${RESET} $*"; }
+warn() { echo -e "${YELLOW}⚠️  $*${RESET}"; }
+die()  { echo -e "${RED}❌ $*${RESET}" >&2; exit 1; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' is required but not installed."
@@ -36,7 +43,6 @@ detect_sed() {
   fi
 }
 
-# Using a control character (\001) as a delimiter to support passwords with symbols
 safe_sed() {
   local search="$1"
   local replace="$2"
@@ -58,13 +64,13 @@ detect_profile() {
 
 cmd_help() {
 cat <<EOF
-🌕 Moonlight CLI v$VERSION
+${BOLD}🌕 Moonlight CLI v$VERSION${RESET}
 Service Cops Spring Boot Project Toolkit
 
-Usage:
+${BOLD}Usage:${RESET}
   moonlight <command> [options]
 
-Core Commands:
+${BOLD}Core Commands:${RESET}
   new <name> [tag]      Create a new project from template
   check                 Show latest available template tag
   update | -u           Update Moonlight CLI to latest version
@@ -72,7 +78,7 @@ Core Commands:
   uninstall             Remove Moonlight CLI
   help | -h             Show this help message
 
-Examples:
+${BOLD}Examples:${RESET}
   moonlight new billing-service
 EOF
 }
@@ -98,21 +104,22 @@ cmd_new() {
     | grep -v '\^{}' | awk -F/ '{print $3}' | tail -n 1 || true)"
 
   local TARGET_TAG="${TAG_VERSION:-${LATEST_TAG:-main}}"
-  log "Using template tag: $TARGET_TAG"
+  log "Using template tag: ${BOLD}$TARGET_TAG${RESET}"
 
   # Database Setup
   local DB_NAME DB_USER DB_PASS
+  echo -e "\n${BOLD}📦 Database Configuration${RESET}"
   while true; do
-    read -rp "Database Name [$APP_NAME]: " DB_NAME
+    read -rp "  $(echo -e "${BLUE}➜${RESET} Database Name [$APP_NAME]: ")" DB_NAME
     DB_NAME="${DB_NAME:-$APP_NAME}"
     [[ "$DB_NAME" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] && break
-    warn "Invalid database name. Use alphanumeric/underscores only."
+    warn "  Invalid database name. Use alphanumeric/underscores only."
   done
 
-  read -rp "Database Username [postgres]: " DB_USER
+  read -rp "  $(echo -e "${BLUE}➜${RESET} Database Username [postgres]: ")" DB_USER
   DB_USER="${DB_USER:-postgres}"
-  read -rsp "Database Password (empty for none): " DB_PASS
-  echo ""
+  read -rsp "  $(echo -e "${BLUE}➜${RESET} Database Password (hidden): ")" DB_PASS
+  echo -e "\n"
 
   if command -v psql >/dev/null 2>&1; then
     log "Checking PostgreSQL..."
@@ -165,15 +172,38 @@ cmd_new() {
   git add .
   git commit -m "Initial commit from Moonlight"
 
-  log "Project '$APP_NAME' created successfully 🚀"
-
   # IDE Prompt
-  echo "------------------------------------------------"
-  echo "📂 Open in: 1) IntelliJ  2) VS Code  3) Done"
-  read -rp "Selection [3]: " IDE_CHOICE
+  echo -e "\n${BOLD}${GREEN}✨ Project '$APP_NAME' created successfully!${RESET}"
+  echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo -e "  ${BLUE}1)${RESET} Open in ${BOLD}IntelliJ IDEA${RESET}"
+  echo -e "  ${BLUE}2)${RESET} Open in ${BOLD}VS Code${RESET}"
+  echo -e "  ${BLUE}3)${RESET} Stay in Terminal"
+  echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  read -rp "$(echo -e "  ${BLUE}➜${RESET} Select an option [3]: ")" IDE_CHOICE
+
   case "$IDE_CHOICE" in
-    1) command -v idea &>/dev/null && idea . || ([[ "$OSTYPE" == "darwin"* ]] && open -a "IntelliJ IDEA" .) ;;
-    2) command -v code &>/dev/null && code . ;;
+    1)
+      log "Launching IntelliJ IDEA..."
+      if command -v idea &>/dev/null; then
+        idea .
+      elif [[ "$OSTYPE" == "darwin"* ]]; then
+        open -a "IntelliJ IDEA" . || warn "IntelliJ IDEA not found in Applications."
+      else
+        warn "Could not find 'idea' command in PATH."
+      fi
+      ;;
+    2)
+      log "Launching VS Code..."
+      if command -v code &>/dev/null; then
+        code .
+      else
+        warn "Could not find 'code' command in PATH."
+      fi
+      ;;
+    *)
+      log "Happy coding! Navigate to your project: ${BOLD}cd $APP_NAME${RESET}"
+      ;;
   esac
 }
 
@@ -241,7 +271,7 @@ case "$COMMAND" in
   new)        cmd_new ;;
   check)      cmd_check ;;
   update|-u)  cmd_update ;;
-  version|-v) echo "🌕 Moonlight CLI v$VERSION" ;;
+  version|-v) echo -e "🌕 Moonlight CLI ${BOLD}v$VERSION${RESET}" ;;
   help|-h)    cmd_help ;;
   uninstall)  cmd_uninstall ;;
   *)          cmd_help ;;
