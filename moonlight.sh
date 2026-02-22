@@ -28,9 +28,10 @@ RESET='\033[0m'
 # Utilities
 #######################################
 
-log()  { echo -e "${BLUE}🌕${RESET} $*"; }
-warn() { echo -e "${YELLOW}⚠️  $*${RESET}"; }
-die()  { echo -e "${RED}❌ $*${RESET}" >&2; exit 1; }
+log()      { echo -e "${BLUE}🌕${RESET} $*"; }
+done_log() { echo -e "${GREEN}✅${RESET} $*"; }
+warn()     { echo -e "${YELLOW}⚠️  $*${RESET}"; }
+die()      { echo -e "${RED}❌ $*${RESET}" >&2; exit 1; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' is required but not installed."
@@ -260,12 +261,30 @@ cmd_uninstall() {
   PROFILE="$(detect_profile)"
   detect_sed
 
-  rm -rf "$MOONLIGHT_HOME"
-  sed "${SED_INPLACE[@]}" '/alias moonlight=/d' "$PROFILE"
-  sed "${SED_INPLACE[@]}" '/moonlight/d' "$PROFILE"
+  log "Removing Moonlight files..."
 
-  log "Moonlight removed. Restarting shell..."
-  exec "$SHELL" -l
+  # 1. Remove binary symlink
+  if [[ -L "$HOME/.local/bin/moonlight" ]] || [[ -f "$HOME/.local/bin/moonlight" ]]; then
+    rm "$HOME/.local/bin/moonlight"
+  fi
+
+  # 2. Remove home directory
+  rm -rf "$MOONLIGHT_HOME"
+
+  # 3. Clean Shell Profile
+  if [[ -f "$PROFILE" ]]; then
+    sed "${SED_INPLACE[@]}" '/moonlight/d' "$PROFILE"
+    sed "${SED_INPLACE[@]}" '/.local\/bin/d' "$PROFILE"
+  fi
+
+  done_log "Moonlight successfully removed."
+  echo -e "Note: To clear the command cache in this window, run: ${BOLD}hash -r${RESET}"
+
+  echo -ne "\n${BOLD}➜${RESET} Restart shell to apply changes? (y/n): "
+  read -r RESTART
+  if [[ "$RESTART" =~ ^[yY]$ ]]; then
+    exec "$SHELL" -l
+  fi
 }
 
 #######################################
