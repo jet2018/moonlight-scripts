@@ -2,14 +2,15 @@
 set -Eeuo pipefail
 
 #######################################
-# Moonlight CLI v0.0.2
+# Moonlight CLI v0.0.3
 # Service Cops Tooling
 #######################################
 
-VERSION="0.0.2"
+VERSION="0.0.3"
 # Current published starter-kit tag. Used when ls-remote fails (private Bitbucket).
 DEFAULT_TEMPLATE_TAG="v2.0.4"
-TEMPLATE_URL="https://bitbucket.org/servicecops/j2j_spring_boot_starter_kit.git"
+TEMPLATE_HOST_PATH="bitbucket.org/servicecops/j2j_spring_boot_starter_kit.git"
+TEMPLATE_URL="https://${TEMPLATE_HOST_PATH}"
 RAW_SCRIPT_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 BASE_GROUP_PATH="com/servicecops"
 MOONLIGHT_HOME="$HOME/.moonlight"
@@ -66,10 +67,26 @@ detect_profile() {
 # HELP
 #######################################
 
+template_git_url() {
+  if [[ -n "${BITBUCKET_TOKEN:-}" ]]; then
+    echo "https://x-token-auth:${BITBUCKET_TOKEN}@${TEMPLATE_HOST_PATH}"
+  else
+    echo "$TEMPLATE_URL"
+  fi
+}
+
+# List tags without the macOS Keychain app-password (Bitbucket returns 410 for those).
 latest_template_tag() {
-  local remote
-  remote="$(git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" 2>/dev/null \
-    | grep -v '\^{}' | awk -F/ '{print $3}' | grep -E '^v?[0-9]' | tail -n 1 || true)"
+  local url remote=""
+  url="$(template_git_url)"
+  remote="$(
+    GIT_TERMINAL_PROMPT=0 git -c credential.helper= \
+      ls-remote --tags --sort="v:refname" "$url" 2>/dev/null \
+      | grep -v '\^{}' \
+      | awk -F/ '{print $3}' \
+      | grep -E '^v?[0-9]' \
+      | tail -n 1 || true
+  )" || true
   echo "${remote:-$DEFAULT_TEMPLATE_TAG}"
 }
 
@@ -148,10 +165,19 @@ cmd_new() {
   fi
 
   log "Cloning template..."
-  git clone --depth 1 --branch "$TARGET_TAG" "$TEMPLATE_URL" "$APP_NAME" \
-    || die "Clone failed. Verify Bitbucket access."
+  if ! git clone --depth 1 --branch "$TARGET_TAG" "$TEMPLATE_URL" "$APP_NAME"; then
+    if [[ -z "${BITBUCKET_TOKEN:-}" ]]; then
+      warn "Bitbucket rejected git (app passwords return HTTP 410)."
+      die "Create an Atlassian API token, export BITBUCKET_TOKEN=..., then retry."
+    fi
+    log "Retrying clone with BITBUCKET_TOKEN..."
+    GIT_TERMINAL_PROMPT=0 git -c credential.helper= \
+      clone --depth 1 --branch "$TARGET_TAG" "$(template_git_url)" "$APP_NAME" \
+      || die "Clone failed even with BITBUCKET_TOKEN."
+  fi
 
   cd "$APP_NAME"
+  git remote set-url origin "$TEMPLATE_URL" 2>/dev/null || true
 
   safe_sed "<artifactId>project</artifactId>" "<artifactId>$APP_NAME</artifactId>" pom.xml
   safe_sed "<name>project</name>" "<name>$APP_NAME</name>" pom.xml
