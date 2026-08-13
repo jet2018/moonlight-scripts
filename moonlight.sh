@@ -2,11 +2,13 @@
 set -Eeuo pipefail
 
 #######################################
-# Moonlight CLI v0.0.1
+# Moonlight CLI v0.0.2
 # Service Cops Tooling
 #######################################
 
-VERSION="0.0.1"
+VERSION="0.0.2"
+# Current published starter-kit tag. Used when ls-remote fails (private Bitbucket).
+DEFAULT_TEMPLATE_TAG="v2.0.4"
 TEMPLATE_URL="https://bitbucket.org/servicecops/j2j_spring_boot_starter_kit.git"
 RAW_SCRIPT_URL="https://raw.githubusercontent.com/jet2018/moonlight-scripts/main/moonlight.sh"
 BASE_GROUP_PATH="com/servicecops"
@@ -64,9 +66,17 @@ detect_profile() {
 # HELP
 #######################################
 
+latest_template_tag() {
+  local remote
+  remote="$(git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" 2>/dev/null \
+    | grep -v '\^{}' | awk -F/ '{print $3}' | grep -E '^v?[0-9]' | tail -n 1 || true)"
+  echo "${remote:-$DEFAULT_TEMPLATE_TAG}"
+}
+
 cmd_help() {
   echo -e "${BOLD}🌕 Moonlight CLI v$VERSION${RESET}"
   echo -e "Service Cops Spring Boot Project Toolkit"
+  echo -e "Template tag: ${BOLD}$DEFAULT_TEMPLATE_TAG${RESET}"
   echo -e ""
   echo -e "${BOLD}Usage:${RESET}"
   echo -e "  moonlight <command> [options]"
@@ -75,12 +85,13 @@ cmd_help() {
   echo -e "  ${BLUE}new${RESET} <name> [tag]      Create a new project from template"
   echo -e "  ${BLUE}check${RESET}                 Show latest available template tag"
   echo -e "  ${BLUE}update${RESET} | -u           Update Moonlight CLI to latest version"
-  echo -e "  ${BLUE}version${RESET} | -v          Show installed CLI version"
+  echo -e "  ${BLUE}version${RESET} | -v          Show CLI version and template tag"
   echo -e "  ${BLUE}uninstall${RESET}             Remove Moonlight CLI"
   echo -e "  ${BLUE}help${RESET} | -h             Show this help message"
   echo -e ""
   echo -e "${BOLD}Examples:${RESET}"
   echo -e "  moonlight new billing-service"
+  echo -e "  moonlight new billing-service v2.0.4"
 }
 
 #######################################
@@ -100,10 +111,9 @@ cmd_new() {
 
   log "Fetching latest template tag..."
   local LATEST_TAG
-  LATEST_TAG="$(git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" \
-    | grep -v '\^{}' | awk -F/ '{print $3}' | tail -n 1 || true)"
+  LATEST_TAG="$(latest_template_tag)"
 
-  local TARGET_TAG="${TAG_VERSION:-${LATEST_TAG:-main}}"
+  local TARGET_TAG="${TAG_VERSION:-$LATEST_TAG}"
   log "Using template tag: ${BOLD}$TARGET_TAG${RESET}"
 
   # Database Setup
@@ -219,8 +229,7 @@ cmd_new() {
 cmd_check() {
   require_cmd git
   log "Checking latest template tag..."
-  git ls-remote --tags --sort="v:refname" "$TEMPLATE_URL" \
-    | grep -v '\^{}' | awk -F/ '{print $3}' | tail -n 1
+  latest_template_tag
 }
 
 #######################################
@@ -295,7 +304,10 @@ case "$COMMAND" in
   new)        cmd_new ;;
   check)      cmd_check ;;
   update|-u)  cmd_update ;;
-  version|-v) echo -e "🌕 Moonlight CLI ${BOLD}v$VERSION${RESET}" ;;
+  version|-v)
+    echo -e "🌕 Moonlight CLI ${BOLD}v$VERSION${RESET}"
+    echo -e "   Template tag: ${BOLD}$DEFAULT_TEMPLATE_TAG${RESET}"
+    ;;
   help|-h)    cmd_help ;;
   uninstall)  cmd_uninstall ;;
   *)          cmd_help ;;
